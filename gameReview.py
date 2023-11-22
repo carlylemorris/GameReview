@@ -4,10 +4,15 @@ import chess.pgn
 import chess.engine
 from io import StringIO
 from matplotlib import pyplot as plt
+from math import log
 
 ENGINE = "./tools/stockfish"
 ENGINE_DEPTH = 22 # engine analysis depth, go lower if you dont like waiting
 CHART_DPI = 600 # crips charts only
+MATE_SCORE = 100000
+
+def scale(x):
+    return log(abs(x/1000) + 1) * (-1 if x<0 else 1)
 
 def main():
     if len(sys.argv) > 3:
@@ -45,7 +50,7 @@ def main():
     
         info = engine.analyse(board,chess.engine.Limit(depth=ENGINE_DEPTH))
         
-        (wmoves if i%2 == 0 else bmoves).append(info["score"].pov(color).score(mate_score=10**7))
+        (wmoves if i%2 == 0 else bmoves).append(info["score"].pov(color).score(mate_score=MATE_SCORE))
         i += 1
 
 
@@ -62,37 +67,37 @@ def main():
 
     deltas = [post-pre for pre,post in zip(premoves,postmoves)]
 
-    deltasCopy = list(deltas)   
+    numDeltas = [(i,delta) for i,delta in enumerate(deltas)]
+    numDeltas.sort(key=lambda x:-1*x[1])
 
     print("Mistakes: ")
-    while min(deltas) < 0:
-        moveNum = deltas.index(min(deltas))
-        print(f"Move {moveNum+md:3} {deltas[moveNum]:10} ({premoves[moveNum]} to {postmoves[moveNum]})")
-        deltas[moveNum] = 0 #trashes list
-    
-    deltas = deltasCopy #untrash list
+    for moveNum,delta in numDeltas:
+        print(f"Move {moveNum+md:3} {delta:10} ({premoves[moveNum]} to {postmoves[moveNum]})")
+   
+    finiteDeltas = [d for d in deltas if d < MATE_SCORE/10]
+    n = len(finitieDeltas)
+    mean = sum(finiteDeltas)/n
+    std = (sum([(x-mean)**2 for x in finiteDeltas])/n)**0.5
+
+    print(f"\nRange: {mean-1.96*std/(n)**0.5:.3} - {mean+1.96*std/(n)**0.5:.3}")
 
 
     #Generate eval line graph
-
     moves = list() 
-    evalMax = 1.2 * max([abs(m) if abs(m) < 10**6 else 0 for m in deltas]) 
-
+    
     for wm,bm in zip(wmoves,bmoves):
         for m in [wm,bm]:
-            if abs(m) > 10**6:
-                m = evalMax * (-1 * (m<0))
-            moves.append(m)
+            moves.append(scale(m))
 
-    #plt.plot([0 for i in range(len(moves)//2)])
-    plt.plot([i/2 for i in range(len(moves))],
+
+    plt.plot([1+i/2 for i in range(len(moves))],
             moves,
             color="tab:orange")
     
     #Generate bar chart
-    barDeltas = [m if abs(m) < 10**6 else evalMax * (-1 * (m<0)) for m in deltas]
+    barDeltas = [scale(m) for m in deltas]
    
-    plt.bar([i+color/2 for i in range(len(deltas))],
+    plt.bar([1+i+color for i in range(len(deltas))],
             barDeltas,
             align="edge",
             width=0.5,
