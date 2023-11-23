@@ -4,28 +4,51 @@ import chess.pgn
 import chess.engine
 from io import StringIO
 from matplotlib import pyplot as plt
+from math import log
+import requests
+import datetime
+#Chess.com username for automated retrival of previous game.
+USERNAME = "Croc0dileL"
 
 ENGINE = "./tools/stockfish"
 ENGINE_DEPTH = 22 # engine analysis depth, go lower if you dont like waiting
 CHART_DPI = 600 # crips charts only
+MATE_SCORE = 100000
+
+def getLastGame(user: str):
+        now = datetime.datetime.now()
+        current_year = now.year
+        current_month = now.month
+        resp = requests.get(f"https://api.chess.com/pub/player/{user}/games/{current_year}/{current_month}",headers={"User-Agent":"carlylemorris@gmail.com"})
+        game = resp.json()["games"][-1]
+        return game["pgn"], game["white"]["username"].lower() == user.lower()
+
+
+def scale(x):
+    return x/(500 + abs(x))
 
 def main():
-    if len(sys.argv) > 3:
-        print("\nUsage: python3 gameReview.py [w/b] '[game]'\nMake sure expored game is quoted\n")
-        quit()
-    elif len(sys.argv) == 3:
-        uicolor = sys.argv[1]
-        sanGame = sys.argv[2]
-    else:
-        uicolor = input("Enter Your Color [w/b]: ")
-        sanGame = ""
-        temp = input("Enter PGN Game: ")
-        while(len(sanGame) < 3 or sanGame[-3:] != "\n\n\n"):
-            sanGame += temp + "\n"
-            temp = input()
+    if USERNAME == "":
+        if len(sys.argv) > 3:
+            print("\nUsage: python3 gameReview.py [w/b] '[game]'\nMake sure expored game is quoted\n")
+            quit()
 
-        
-    color = uicolor != "b"
+        elif len(sys.argv) == 3:
+            uicolor = sys.argv[1]
+            sanGame = sys.argv[2]
+
+        else:
+            uicolor = input("Enter Your Color [w/b]: ")
+            sanGame = ""
+            temp = input("Enter PGN Game: ")
+            while(len(sanGame) < 3 or sanGame[-3:] != "\n\n\n"):
+                sanGame += temp + "\n"
+                temp = input()
+
+            color = uicolor != "b"
+    else:
+        sanGame,color = getLastGame(USERNAME)
+    
     pgn = StringIO(sanGame)
     game = chess.pgn.read_game(pgn)
      
@@ -45,7 +68,7 @@ def main():
     
         info = engine.analyse(board,chess.engine.Limit(depth=ENGINE_DEPTH))
         
-        (wmoves if i%2 == 0 else bmoves).append(info["score"].pov(color).score(mate_score=10**7))
+        (wmoves if i%2 == 0 else bmoves).append(info["score"].pov(color).score(mate_score=MATE_SCORE))
         i += 1
 
 
@@ -62,37 +85,29 @@ def main():
 
     deltas = [post-pre for pre,post in zip(premoves,postmoves)]
 
-    deltasCopy = list(deltas)   
+    numDeltas = [(i,delta) for i,delta in enumerate(deltas)]
+    numDeltas.sort(key=lambda x:-1*x[1])
 
     print("Mistakes: ")
-    while min(deltas) < 0:
-        moveNum = deltas.index(min(deltas))
-        print(f"Move {moveNum+md:3} {deltas[moveNum]:10} ({premoves[moveNum]} to {postmoves[moveNum]})")
-        deltas[moveNum] = 0 #trashes list
+    for moveNum,delta in numDeltas:
+        print(f"Move {moveNum+md:3} {delta:10} ({premoves[moveNum]} to {postmoves[moveNum]})")
     
-    deltas = deltasCopy #untrash list
-
-
     #Generate eval line graph
-
     moves = list() 
-    evalMax = 1.2 * max([abs(m) if abs(m) < 10**6 else 0 for m in deltas]) 
-
+    
     for wm,bm in zip(wmoves,bmoves):
         for m in [wm,bm]:
-            if abs(m) > 10**6:
-                m = evalMax * (-1 * (m<0))
-            moves.append(m)
+            moves.append(scale(m))
 
-    #plt.plot([0 for i in range(len(moves)//2)])
-    plt.plot([i/2 for i in range(len(moves))],
+
+    plt.plot([1+i/2 for i in range(len(moves))],
             moves,
             color="tab:orange")
     
     #Generate bar chart
-    barDeltas = [m if abs(m) < 10**6 else evalMax * (-1 * (m<0)) for m in deltas]
+    barDeltas = [scale(m) for m in deltas]
    
-    plt.bar([i+color/2 for i in range(len(deltas))],
+    plt.bar([1+i+color for i in range(len(deltas))],
             barDeltas,
             align="edge",
             width=0.5,
