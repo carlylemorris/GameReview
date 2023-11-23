@@ -8,7 +8,7 @@ from math import log
 import requests
 import datetime
 #Chess.com username for automated retrival of previous game.
-USERNAME = ""
+USERNAME = "Croc0dileL"
 
 ENGINE = "./tools/stockfish"
 ENGINE_DEPTH = 22 # engine analysis depth, go lower if you dont like waiting
@@ -25,7 +25,7 @@ def getLastGame(user: str):
 
 
 def scale(x):
-    return log(abs(x/1000) + 1) * (-1 if x<0 else 1)
+    return x/(500 + abs(x))
 
 def main():
     if USERNAME == "":
@@ -91,15 +91,7 @@ def main():
     print("Mistakes: ")
     for moveNum,delta in numDeltas:
         print(f"Move {moveNum+md:3} {delta:10} ({premoves[moveNum]} to {postmoves[moveNum]})")
-   
-    finiteDeltas = [d for d in deltas if d < MATE_SCORE/10]
-    n = len(finiteDeltas)
-    mean = sum(finiteDeltas)/n
-    std = (sum([(x-mean)**2 for x in finiteDeltas])/n)**0.5
-
-    print(f"\nRange: {mean-1.96*std/(n)**0.5:.3} - {mean+1.96*std/(n)**0.5:.3}")
-
-
+    
     #Generate eval line graph
     moves = list() 
     
